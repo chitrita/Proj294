@@ -12,6 +12,7 @@ import urllib2;
 import os;
 import sys;
 import subprocess as sp;
+import fileinput;
 
 def read_series_matrix(filename):
 
@@ -141,7 +142,7 @@ def download_sra_files(remote_location, local_location = '', max_recursion = 3, 
 
 def sra_to_fastq(sra_filename):
     sra_filename = os.path.abspath(sra_filename);
-    sp.check_call(["fastq-dump", sra_filename]);
+    sp.check_call(["fastq-dump",'--outdir',os.path.dirname(sra_filename), sra_filename]);
     return sra_filename.rstrip('.sra')+'.fastq';
 
 def download_sra_for_sample(exp_matrix, antibody, time):
@@ -149,14 +150,36 @@ def download_sra_for_sample(exp_matrix, antibody, time):
         exp_matrix = read_series_matrix(exp_matrix);
     
     exp = select_exp(exp_matrix, antibody, time);
-    
+
+    fastq_files = list();    
+ 
     for j in range(3,9):
         key = 'Sample_supplementary_file_' + str(j);
         ftp_str = exp[key];
         if(len(ftp_str) > 0):
             sra_files = download_sra_files(ftp_str, 'temp', verbose = True);
             for filename in sra_files:
-                sra_to_fastq(filename);           
+                fastq_files.append(sra_to_fastq(filename));
+
+    #merge all fastq files into one
+
+    if(len(fastq_files) == 0):
+        print("Error, no SRA files downloaded.");
+        return;
+
+    out_fastq_name = str(antibody) + "_" + str(time) + ".fastq";
+
+    out_fastq_name = os.path.dirname(fastq_files[0]) + os.sep + out_fastq_name;
+
+    with open(out_fastq_name, 'w') as fout:
+        for line in fileinput.input(fastq_files):
+            fout.write(line)
+
+    #Clean up partial fastq files
+    for filename in fastq_files:
+        os.remove(filename);
+
+    return out_fastq_name;
     
         
 if(__name__ == "__main__"):
