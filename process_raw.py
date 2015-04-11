@@ -39,12 +39,12 @@ def ChIPSeq_Pipeline(fastq_file):
     
     #Clean up
     sys.argv = old_args;
-    target_files = ['aligned_sorted_marked_dumplicates.bam']  #Need to check if this is what we want
-    for filename in target_files:    
-        shutil.move(dumpdirectory + os.sep + filename, outdirectory);
+    target_file = 'aligned_sorted_marked_dumplicates.bam';  #Need to check if this is what we want   
+    new_file_name = outdirectory + os.sep + fastq_file.rstrip('.fastq') + '.bam';
+    shutil.move(dumpdirectory + os.sep + target_file, new_file_name);
     
     os.rmdir(dumpdirectory);
     
-    return target_files;
+    return new_file_name;
     
 
