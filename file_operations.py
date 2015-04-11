@@ -68,6 +68,8 @@ def download_sra_files(remote_location, local_location = '', max_recursion = 3, 
     Max-recursion set to 3 levels (just in case)
     """
   
+    downloaded_files = list();  
+  
     def printv(*args):
         if(verbose):
             print(*args);
@@ -95,7 +97,8 @@ def download_sra_files(remote_location, local_location = '', max_recursion = 3, 
     
     
     for folder in folders:
-        download_sra_files(remote_location + '/' + folder, local_location, max_recursion - 1, verbose);
+        dl_files = download_sra_files(remote_location + '/' + folder, local_location, max_recursion - 1, verbose);
+        downloaded_files.extend(dl_files);
     
     #Identify SRA files
     files = list();
@@ -127,29 +130,43 @@ def download_sra_files(remote_location, local_location = '', max_recursion = 3, 
     
         req = urllib2.Request(file_str);
         response = urllib2.urlopen(req);
-    
-        dest_file = open(abs_local_location + os.sep + file_name, 'wb');
+        
+        dest_file_name = abs_local_location + os.sep + file_name;
+        dest_file = open(dest_file_name, 'wb');
         shutil.copyfileobj(response, dest_file)
         dest_file.close();
+        downloaded_files.append(dest_file_name);
+    
+    return downloaded_files;
 
 def sra_to_fastq(sra_filename):
     sra_filename = os.path.abspath(sra_filename);
     sp.check_call(["fastq-dump", sra_filename]);
     return sra_filename.rstrip('.sra')+'.fastq';
 
-#location of the experiment metadata file
-exp_file = './Data/GSE36104-GPL15103_series_matrix.txt';
+def download_sra_for_sample(exp_matrix, antibody, time):
+    if(type(exp_matrix) is str):
+        exp_matrix = read_series_matrix(exp_matrix);
+    
+    exp = select_exp(exp_matrix, antibody, time);
+    
+    for j in range(3,9):
+        key = 'Sample_supplementary_file_' + str(j);
+        ftp_str = exp[key];
+        if(len(ftp_str) > 0):
+            sra_files = download_sra_files(ftp_str, 'temp', verbose = True);
+            for filename in sra_files:
+                sra_to_fastq(filename);           
+    
+        
+if(__name__ == "__main__"):
 
-exp_dict = read_series_matrix(exp_file);
-
-antibody = 'IRF4';
-time = 0;  #0 30 60 or 120
-exp = select_exp(exp_dict, antibody, time);
-
-#Get this from the experiment matrix file
-for j in range(3,9):
-    key = 'Sample_supplementary_file_' + str(j);
-    ftp_str = exp[key];
-    if(len(ftp_str) > 0):
-        download_sra_files(ftp_str, 'temp', verbose = True);
+    #location of the experiment metadata file
+    exp_file = './Data/GSE36104-GPL15103_series_matrix.txt';
+    
+    exp_dict = read_series_matrix(exp_file);
+    
+    antibody = 'IRF4';
+    time = 0;  #0 30 60 or 120
+    download_sra_for_sample(exp_dict, antibody, time);
 
