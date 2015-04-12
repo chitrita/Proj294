@@ -145,6 +145,13 @@ def sra_to_fastq(sra_filename):
     sp.check_call(["fastq-dump",'--outdir',os.path.dirname(sra_filename), sra_filename]);
     return sra_filename.rstrip('.sra')+'.fastq';
 
+def bam_to_bed(bam_filename):
+    bed_filename = bam_filename.rstrip('.bam') + '.bed';
+    with open(bed_filename, 'w') as fout:
+        sp.check_call(['bedtools', 'bamtobed', '-i', bam_filename], stdout=fout)
+    
+    return bed_filename;
+
 def download_sra_for_sample(exp_matrix, antibody, time):
     if(type(exp_matrix) is str):
         exp_matrix = read_series_matrix(exp_matrix);
