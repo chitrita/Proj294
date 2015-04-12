@@ -146,6 +146,7 @@ def sra_to_fastq(sra_filename):
     return sra_filename.rstrip('.sra')+'.fastq';
 
 def bam_to_bed(bam_filename):
+    bam_filename = os.path.abspath(bam_filename);
     bed_filename = bam_filename.rstrip('.bam') + '.bed';
     with open(bed_filename, 'w') as fout:
         sp.check_call(['bedtools', 'bamtobed', '-i', bam_filename], stdout=fout)
