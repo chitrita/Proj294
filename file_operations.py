@@ -31,7 +31,7 @@ def read_series_matrix(filename):
            new_key = [x for x in split_line[1:] if len(x) > 0][0].split(':')[0];
            new_values = [''.join(x.split(':')[1:]).strip() for x in split_line[1:]];
            exp_dict[new_key] = new_values;
-        for j in range(3,9):
+        for j in range(1,10):
             if(key == ('Sample_supplementary_file_' + str(j))):
                 exp_dict[key] = split_line[1:];
             
@@ -187,16 +187,119 @@ def download_sra_for_sample(exp_matrix, antibody, time):
         os.remove(filename);
 
     return out_fastq_name;
+
+def download_peaks_for_sample(exp_matrix, antibody, time, outputdir = ''):
+    if(outputdir == ''):
+        outputdir = os.getcwd();
     
-        
+    abs_outputdir = os.path.abspath(outputdir);    
+    
+    if(type(exp_matrix) is str):
+        exp_matrix = read_series_matrix(exp_matrix);
+    
+    exp = select_exp(exp_matrix, antibody, time);
+    
+    file_str = exp['Sample_supplementary_file_2'];    
+    file_name = os.path.basename(file_str);    
+    
+    print("Downloading ", file_str);    
+    
+    req = urllib2.Request(file_str);
+    response = urllib2.urlopen(req);
+    
+    dest_file_name = abs_outputdir + os.sep + file_name;
+    dest_file = open(dest_file_name, 'wb');
+    shutil.copyfileobj(response, dest_file)
+    dest_file.close();
+    
+    #Unzip if necessary
+    if(dest_file_name.endswith('.gz')):
+        sp.check_call(['gzip','-d',dest_file_name]);
+        dest_file_name = dest_file_name.rstrip('.gz');
+    
+    return dest_file_name;
+
+def bed_merge(output_file, *inputfiles):
+    """
+    Runs bedtools merge command on all input files.
+    Sends output to output_file
+    Returns output_File
+    
+    If output_file contains a path (at least one path seperator charactrer)
+       then output to that location.  Otherwise, put in same location as the
+       first input file.
+    """
+    working_dir = os.path.dirname(inputfiles[0]);
+    temp_file1 = working_dir + os.sep + "temp_dfj304jfd.txt";
+
+    #Concatenate input files    
+    cat_command = ['cat'];
+    cat_command.extend(inputfiles);
+    with open(temp_file1, 'w') as fout:
+        sp.check_call(cat_command, stdout=fout);
+    
+    #Sort file to be merged
+    temp_file2 = working_dir + os.sep + "temp_fje094j3.txt";
+    with open(temp_file2, 'w') as fout:
+        sp.check_call(['sortBed','-i',temp_file1], stdout=fout);
+    
+    #Merge file
+    if(output_file.find(os.sep) == -1):
+        output_file = working_dir + os.sep + output_file;
+
+    with open(output_file, 'w') as fout:
+        sp.check_call(['bedtools','merge','-i',temp_file2], stdout=fout);
+    
+    #Clean up temporary files
+    os.remove(temp_file1);
+    os.remove(temp_file2);
+    
+    return output_file;
+
 if(__name__ == "__main__"):
+
+    working_dir = os.getcwd();
 
     #location of the experiment metadata file
     exp_file = './Data/GSE36104-GPL15103_series_matrix.txt';
     
     exp_dict = read_series_matrix(exp_file);
     
-    antibody = 'IRF4';
-    time = 0;  #0 30 60 or 120
-    download_sra_for_sample(exp_dict, antibody, time);
+    antibody1 = 'IRF4';
+    time1 = 0;  #0 30 60 or 120
+    fastq_file1 = download_sra_for_sample(exp_dict, antibody1, time1);
+    peaks_file1 = download_peaks_for_sample(exp_dict, antibody1, time1);
 
+    antibody2 = 'IRF4';
+    time2 = 120;  #0 30 60 or 120
+    fastq_file2 = download_sra_for_sample(exp_dict, antibody2, time2);
+    peaks_file2 = download_peaks_for_sample(exp_dict, antibody2, time2);
+
+    import process_raw;
+    
+    #Then can run ChipSeq pipeline on files
+    bam1 = process_raw.ChIPSeq_Pipeline(fastq_file1);    
+    bed1 = bam_to_bed(bam1);
+
+    bam2 = process_raw.ChIPSeq_Pipeline(fastq_file2);
+    bed2 = bam_to_bed(bam2);
+
+    peaks_filename = antibody1 + '_' + time1 + '_' + antibody2 + '_' + time2 + '.txt';
+    peaks_file = bed_merge(peaks_filename, peaks_file1, peaks_file2);
+    
+    #MANorm
+    
+    from manorm import MANorm;
+    
+    manorm_analysis = MANorm();
+    manorm_analysis.set_rawfiles(bed1, bed2);
+    manorm_analysis.set_peakfiles(peaks_file1, peaks_file2);
+    
+    manorm_outputdir = working_dir + os.sep + "MANorm_Output";
+    manorm_workdir = manorm_outputdir + os.sep + "work_dir";
+    manorm_analysis.set_workdir(manorm_workdir);
+    manorm_analysis.set_outputdir(manorm_outputdir);
+    
+    manorm_analysis.run();
+    
+    
