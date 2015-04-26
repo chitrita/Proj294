@@ -10,7 +10,7 @@ import subprocess as sp;
 
 matlab_source = """
 
-addpath('CodeLib');
+addpath('/home/eecs/david.detomaso/Programs/MAnorm_MATLAB_Package/CodeLib');
 
 %%%%%% start of parameter region %%%%%%
 nchr = 21;              % number of chromosomes; 24 for human, 21 for mouse
@@ -25,7 +25,7 @@ tag_shift_1 = 100;
 tag_length_1 = 36;        
 
 % the bed file name of peak coordinate of sample 2
-peakfile_2 = '$peakfile_2$;
+peakfile_2 = '$peakfile_2$';
 % the bed file name of read coordinate of sample 2: Yale ENCODE MYC ChIP-seq data replicate 1 in K562 cells
 rawdatafile_2 = '$rawdatafile_2$';
 % shift size of reads for sample 1; which equal to the half of the DNA fragment after size selection
@@ -69,10 +69,10 @@ step2_classify_2peak_sets_by_overlap(peak_name_1, peak_name_2, workdir, Nsamp);
 % split raw data by chromosome
 disp(' ');
 disp('Step3: read and split raw data by chromosome');
-[pathstr1, marker_name_1, ext1, versn1] = fileparts(rawdatafile_1);
+[pathstr1, marker_name_1, ext1] = fileparts(rawdatafile_1);
 step3_split_sequencing_data_2chr(rawdatafile_1, nchr, workdir);
 
-[pathstr2, marker_name_2, ext2, versn2] = fileparts(rawdatafile_2);
+[pathstr2, marker_name_2, ext2] = fileparts(rawdatafile_2);
 step3_split_sequencing_data_2chr(rawdatafile_2, nchr, workdir);
 
 % calculate read density in peaks
@@ -97,8 +97,9 @@ disp('Summarize data: merge common peaks and extract differential and non-differ
 step7_define_biased_unbiased_peaks(peak_name_1, peak_name_2, workdir, MApair, outputdir, Mcut_unbiased, Mcut_biased, Pcut_biased)
 
 % clean up
-rmpath('CodeLib');
+rmpath('/home/eecs/david.detomaso/Programs/MAnorm_MATLAB_Package/CodeLib');
 clear all;
+exit();
 """;
 
 class MANorm:
@@ -132,33 +133,48 @@ class MANorm:
         if(len(self.outputdir) == 0):
             print("Error, Output Directory not set");
             return;
-            
+        
+        if(not os.path.isdir(self.outputdir)):
+            os.makedirs(self.outputdir);
+
+        if(not os.path.isdir(self.workdir)):
+            os.makedirs(self.workdir);
+        
+        self.matlab_source = matlab_source;
         self.matlab_source = self.matlab_source.replace('$peakfile_1$',self.peakfile1);
         self.matlab_source = self.matlab_source.replace('$rawdatafile_1$',self.rawfile1);
         self.matlab_source = self.matlab_source.replace('$peakfile_2$',self.peakfile2);
-        self.matlab_source = self.matlab_source.replace('$rawdatafile_2_1$',self.rawfile2);
+        self.matlab_source = self.matlab_source.replace('$rawdatafile_2$',self.rawfile2);
         self.matlab_source = self.matlab_source.replace('$workdir$',self.workdir);
         self.matlab_source = self.matlab_source.replace('$outputdir$',self.outputdir);
         self.matlab_source = self.matlab_source.replace('$OTHERPARAMS$', ';\n'.join(self.otherparams));
 
-        ff = open(self.workdir + os.sep + self.matlab_filename, 'w');
+        abs_matlab_filename = self.workdir + os.sep + self.matlab_filename;
+        ff = open(abs_matlab_filename, 'w');
         ff.write(self.matlab_source);
         ff.close();
         
-        sp.check_call(['matlab', '-r', self.matlab_filename]);
+        matlab_command = "run('" + abs_matlab_filename + "');";
+        sp.check_call(['matlab','-nosplash','-nodesktop','-r',matlab_command]);
         
     def set_peakfiles(self, peakfile1, peakfile2):
+        peakfile1 = os.path.abspath(peakfile1);
+        peakfile2 = os.path.abspath(peakfile2);
         self.peakfile1 = peakfile1;
         self.peakfile2 = peakfile2;
     
     def set_rawfiles(self, rawfile1, rawfile2):
+        rawfile1 = os.path.abspath(rawfile1);
+        rawfile2 = os.path.abspath(rawfile2);
         self.rawfile1 = rawfile1;
         self.rawfile2 = rawfile2;
     
     def set_outputdir(self, outputdir):
+        outputdir = os.path.abspath(outputdir);
         self.outputdir = outputdir;
         
     def set_workdir(self, workdir):
+        workdir = os.path.abspath(workdir);
         self.workdir = workdir;
     
     
