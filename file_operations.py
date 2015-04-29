@@ -33,65 +33,6 @@ def isPairedSRA(filename):
 
 
 
-def read_series_matrix(filename):
-
-    ff = open(filename,'r');
-    all_lines = ff.read().splitlines();
-    ff.close();
-
-
-    exp_dict = dict();
-    for line in all_lines:
-        split_line = line.split('\t');
-        split_line = [sl.replace("\"","") for sl in split_line];
-        key = split_line[0];
-        key = key.replace('!','');
-        if(key == 'Sample_characteristics_ch1'):
-           new_key = [x for x in split_line[1:] if len(x) > 0][0].split(':')[0];
-           new_values = [''.join(x.split(':')[1:]).strip() for x in split_line[1:]];
-           exp_dict[new_key] = new_values;
-        for j in range(1,10):
-            if(key == ('Sample_supplementary_file_' + str(j))):
-                exp_dict[key] = split_line[1:];
-
-    return exp_dict;
-
-
-def select_exp(exp_dict, antibody, time, all=False):
-
-    match_antibody = {i for i, x in enumerate(exp_dict['chip antibody']) if antibody.lower() == x.lower()}
-
-    corrected_time = str(time) + " min";
-
-    match_time = {i for i, x in enumerate(exp_dict['time']) if corrected_time.lower() == x.lower()}
-
-    match_sample = match_antibody.intersection(match_time);
-    if(len(match_sample) == 0):
-        print("Error, no matching sample");
-        return;
-    if(len(match_sample) > 1):
-        if(not all):
-            print("Error, multiple matching samples");
-            return;
-        else:
-            all_exps = list();
-            for sample in match_sample:
-                exp_info = dict();
-                for key in exp_dict.keys():
-                    exp_info[key] = exp_dict[key][sample];
-                all_exps.append(exp_info);
-
-            return all_exps;
-    else:  #length equals one
-
-        match_sample = match_sample.pop();
-
-        exp_info = dict();
-        for key in exp_dict.keys():
-            exp_info[key] = exp_dict[key][match_sample];
-
-        return exp_info;
-
 def download_sra_files(remote_location, local_location = '', max_recursion = 3, verbose = False):
     """
     Downloads all SRR files in any subdirectory of the remote location
@@ -197,8 +138,9 @@ def bam_to_bed(bam_filename):
 
     return bed_filename;
 
-def download_sra_for_sample(exp):
-    local_location = meta_data.directory_raw_reads(exp);
+def download_sra_for_sample(exp, local_location=''):
+    if(local_location == ''):
+        local_location = meta_data.directory_raw_reads(exp);
 
     sra_files = list();
 
@@ -210,8 +152,9 @@ def download_sra_for_sample(exp):
 
     return sra_files;
 
-def reads_to_fastq_for_sample(exp):
-    loc = meta_data.directory_raw_reads(exp);
+def reads_to_fastq_for_sample(exp, loc = ''):
+    if(loc == ''):
+        loc = meta_data.directory_raw_reads(exp);
     antibody = exp["chip antibody"];
     time = exp["time"].replace(" ", "");
     sra_files = [loc + os.sep + filename for filename in os.listdir(loc) if filename.lower().endswith('.sra')];
@@ -224,12 +167,12 @@ def reads_to_fastq_for_sample(exp):
             if f1 is not None: fastq_1_files.append(f1);
             if f2 is not None: fastq_2_files.append(f2);
 
-        out_fastq1_name = str(antibody) + "_1" + str(time) + ".fastq";
-        out_fastq1_name = meta_data.directory_raw_reads(exp) + os.sep + out_fastq1_name;
+        out_fastq1_name = str(antibody) + "_" + str(time) + "_1.fastq";
+        out_fastq1_name = loc + os.sep + out_fastq1_name;
 
 
-        out_fastq2_name = str(antibody) + "_2" + str(time) + ".fastq";
-        out_fastq2_name = meta_data.directory_raw_reads(exp) + os.sep + out_fastq2_name;
+        out_fastq2_name = str(antibody) + "_" + str(time) + "_2.fastq";
+        out_fastq2_name = loc + os.sep + out_fastq2_name;
 
         with open(out_fastq1_name, 'w') as fout:
             for line in fileinput.input(fastq_1_files):
@@ -239,9 +182,9 @@ def reads_to_fastq_for_sample(exp):
             for line in fileinput.input(fastq_2_files):
                 fout.write(line);
 
-        for filename in fastq1_files:
+        for filename in fastq_1_files:
             os.remove(filename);
-        for filename in fastq2_files:
+        for filename in fastq_2_files:
             os.remove(filename);
         for filename in sra_files:
             os.remove(filename);
@@ -256,7 +199,7 @@ def reads_to_fastq_for_sample(exp):
             if f is not None: fastq_files.append(f);
 
         out_fastq_name = str(antibody) + "_" + str(time) + ".fastq";
-        out_fastq_name = meta_data.directory_raw_reads(exp) + os.sep + out_fastq_name;
+        out_fastq_name = loc + os.sep + out_fastq_name;
         with open(out_fastq_name, 'w') as fout:
             for line in fileinput.input(fastq_files):
                 fout.write(line)
@@ -269,16 +212,14 @@ def reads_to_fastq_for_sample(exp):
 
         return out_fastq_name;
 
-def download_peaks_for_sample(exp_matrix, antibody, time, outputdir = ''):
+def download_peaks_for_sample(exp, outputdir = ''):
     if(outputdir == ''):
-        outputdir = os.getcwd();
+        outputdir = meta_data.directory_peaks(exp);
 
     abs_outputdir = os.path.abspath(outputdir);
 
-    if(type(exp_matrix) is str):
-        exp_matrix = read_series_matrix(exp_matrix);
-
-    exp = select_exp(exp_matrix, antibody, time);
+    if(not os.path.isdir(abs_outputdir)):
+        os.mkdir(abs_outputdir);
 
     file_str = exp['Sample_supplementary_file_2'];
     file_name = os.path.basename(file_str);
@@ -355,6 +296,19 @@ def bed_3cols(bedfile_name, outputfile_name=''):
         for i,line in enumerate(csplit):
             fout.write('\t'.join(line.split('\t')[0:3]) + '\n');
 
+def submit_queue(run_directory, command):
+    with open("run_template.sh", "r") as fin:
+        template = fin.read();
+
+    template = template.replace("<#LOCATION>", run_directory);
+    template = template.replace("<#COMMAND>", command);
+
+    outfile = run_directory + os.sep + "run.sh";
+
+    with open(outfile, "w") as fout:
+        fout.write(template);
+
+    sp.check_call(["qsub", outfile]);
 
 def download_data(antibody1, time1, antibody2, time2):
 
@@ -369,19 +323,15 @@ def download_data(antibody1, time1, antibody2, time2):
 
     return (fastq_file1, peaks_file1, fastq_file2, peaks_file2);
 
-CONTROL_FILE_MATRIX = "/home/eecs/david.detomaso/Proj294/Data/GSE36104-GPL11002_series_matrix.txt";
-
-EXP_FILE_MATRIX = "/home/eecs/david.detomaso/Proj294/Data/GSE36104-GPL15103_series_matrix.txt";
-
 
 def run_pipeline(antibody1, time1, antibody2, time2):
 
     working_dir = os.getcwd();
 
     #location of the experiment metadata file
-    exp_file = EXP_FILE_MATRIX;
+    exp_file = meta_data.EXP_FILE_MATRIX;
 
-    exp_dict = read_series_matrix(exp_file);
+    exp_dict = meta_data.read_series_matrix(exp_file);
 
     fastq_file1 = download_sra_for_sample(exp_dict, antibody1, time1);
     peaks_file1 = download_peaks_for_sample(exp_dict, antibody1, time1);
@@ -412,8 +362,8 @@ def run_pipeline(antibody1, time1, antibody2, time2):
     manorm_analysis.set_rawfiles(bed1, bed2);
     manorm_analysis.set_peakfiles(peaks_file1, peaks_file2);
 
-    manorm_outputdir = working_dir + os.sep + "MANorm_Output" + os.sep;
-    manorm_workdir = manorm_outputdir + "work_dir" + os.sep;
+    manorm_outputdir = working_dir + os.sep + "MANorm_Output";
+    manorm_workdir = manorm_outputdir + "work_dir";
     manorm_analysis.set_workdir(manorm_workdir);
     manorm_analysis.set_outputdir(manorm_outputdir);
 

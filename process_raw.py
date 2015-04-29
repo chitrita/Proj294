@@ -33,7 +33,8 @@ def ChIPSeq_Pipeline_Single(fastq_file, dumpdirectory=''):
         bname = os.path.basename(fastq_file).rstrip(".fastq");
         dumpdirectory = outdirectory + os.sep + bname + '_ChIPSeq_' + '%010x' % random.randrange(16**10);
 
-    os.makedirs(dumpdirectory);
+    if(not os.path.isdir(dumpdirectory)):
+        os.makedirs(dumpdirectory);
 
 
     #mess with arguments
@@ -52,14 +53,15 @@ def ChIPSeq_Pipeline_Single(fastq_file, dumpdirectory=''):
 
     old_dir = os.getcwd();
     os.chdir(os.path.dirname(CS_PIPELINE_LOCATION));
-
+    sys.path.insert(0, os.path.dirname(CS_PIPELINE_LOCATION));
     chipseqQC = execfile(CS_PIPELINE_LOCATION, CS_globals, CS_locals);
 
     #Clean up
     os.chdir(old_dir);
     sys.argv = old_args;
+    sys.path.remove(os.path.dirname(CS_PIPELINE_LOCATION));
 
-def ChIPSeq_Pipeline_Paired(fastq_file1, fastq_file2):
+def ChIPSeq_Pipeline_Paired(fastq_file1, fastq_file2, dumpdirectory=''):
 
 
     fastq_file1 = os.path.abspath(fastq_file1);
@@ -79,7 +81,8 @@ def ChIPSeq_Pipeline_Paired(fastq_file1, fastq_file2):
         bname = os.path.basename(fastq_file1).rstrip("_1.fastq");
         dumpdirectory = outdirectory + os.sep + bname + '_ChIPSeq_' + '%010x' % random.randrange(16**10);
 
-    os.makedirs(dumpdirectory);
+    if(not os.path.isdir(dumpdirectory)):
+        os.makedirs(dumpdirectory);
 
 
     #mess with arguments
@@ -104,22 +107,38 @@ def ChIPSeq_Pipeline_Paired(fastq_file1, fastq_file2):
 
     old_dir = os.getcwd();
     os.chdir(os.path.dirname(CS_PIPELINE_LOCATION));
+    sys.path.insert(0, os.path.dirname(CS_PIPELINE_LOCATION));
 
-    print(os.getcwd()); #For debug purposes
     chipseqQC = execfile(CS_PIPELINE_LOCATION, CS_globals, CS_locals);
 
 
     #Clean up
     os.chdir(old_dir);
     sys.argv = old_args;
+    sys.path.remove(os.path.dirname(CS_PIPELINE_LOCATION));
+
+def remove_intermediates(dumpdirectory = ''):
+    if dumpdirectory == '':
+        dumpdirectory = os.getcwd();
+
+    files_to_remove = ["initial_bowtie_alignment.bam",
+                       "initial_bowtie_alignment.sam"];
+
+    for filename in files_to_remove:
+        os.remove(dumpdirectory + os.sep + filename);
 
 if (__name__ == "__main__"):
-    if(len(sys.argv) == 2):
+    if(len(sys.argv) == 3):
         fastq_file = sys.argv[1];
         dumpdirectory = sys.argv[2];
         ChIPSeq_Pipeline_Single(fastq_file, dumpdirectory);
-    if(len(sys.argv) == 3):
+        os.remove(fastq_file);
+        remove_intermediates(dumpdirectory);
+    if(len(sys.argv) == 4):
         fastq_file1 = sys.argv[1];
         fastq_file2 = sys.argv[2];
         dumpdirectory = sys.argv[3];
         ChIPSeq_Pipeline_Paired(fastq_file1, fastq_file2, dumpdirectory);
+        os.remove(fastq_file1);
+        os.remove(fastq_file2);
+        remove_intermediates(dumpdirectory);
